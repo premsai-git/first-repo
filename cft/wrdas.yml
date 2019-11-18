@@ -1,0 +1,190 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'create a vpc'
+Parameters:
+  keyname:
+    Description: key name
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: ibex-peering
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.10.0.0/16
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: ibex-vpc
+  subNamepub1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-1a
+      VpcId: !Ref VPC
+      CidrBlock: 10.10.1.0/24
+      Tags:
+        - Key: Name
+          Value: ibex-pub1
+  subNamepub2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-1b
+      VpcId: !Ref VPC
+      CidrBlock: 10.10.2.0/24
+      Tags:
+        - Key: Name
+          Value: ibex-pub2
+  subNamepri1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-1a
+      VpcId: !Ref VPC
+      CidrBlock: 10.10.3.0/24
+      Tags:
+        - Key: Name
+          Value: ibex-pri1
+  subNamepri2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: us-east-1b
+      VpcId: !Ref VPC
+      CidrBlock: 10.10.4.0/24
+      Tags:
+        - Key: Name
+          Value: ibex-pri2
+  routeTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: ibex-pub-routeSecurityGroupsIds
+  routeTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: ibex-pri-routeSecurityGroupsIds
+  routeTableAssocName1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref subNamepub1
+      RouteTableId: !Ref routeTable1
+  routeTableAssocName2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref subNamepub2
+      RouteTableId: !Ref routeTable1
+  routeTableAssocName3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref subNamepri1
+      RouteTableId: !Ref routeTable2
+  routeTableAssocName4:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref subNamepri2
+      RouteTableId: !Ref routeTable2
+  igwName:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: ibex-igw
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref igwName
+  routeName1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref routeTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref igwName
+  MyeipName:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  MyNat:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt MyeipName.AllocationId
+      SubnetId: !Ref subNamepub1
+      Tags:
+        - Key: Name
+          Value: ibex-eip
+  routeName2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref routeTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref MyNat
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to client host #required
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 3306
+        ToPort: 3306
+        CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 3306
+        ToPort: 3306
+        CidrIp: 0.0.0.0/0
+  MyLoadBalancer:
+    Type: AWS::ElasticLoadBalancing::LoadBalancer
+    Properties:
+      AvailabilityZones:
+      - "us-east-1a"
+      Listeners:
+      - LoadBalancerPort: '80'
+        InstancePort: '80'
+        Protocol: http
+  AutoScaling:
+    Type: "AWS::AutoScaling::AutoScalingGroup"
+    Properties:
+      VPCZoneIdentifier:
+       - !Ref subNamepub1
+      AutoScalingGroupName: Wordpress
+      AvailabilityZones:
+      - us-east-1a
+      Cooldown: 600
+      DesiredCapacity: 2
+      HealthCheckGracePeriod: 0
+      HealthCheckType: ELB
+      LaunchConfigurationName: !Ref wordpress
+      MaxSize: 3 #required
+      MinSize: 2 #required
+  wordpress:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      LaunchConfigurationName: wordpress
+      AssociatePublicIpAddress: true
+      ImageId: ami-00eb20669e0990cb4
+      InstanceType: t2.micro
+      KeyName: !Ref keyname
+      SecurityGroups:
+      - !Ref InstanceSecurityGroup
+      UserData: !Base64 |
+        #!/bin/bash -ex
+        sudo yum install httpd mysql php -y
+        sudo service httpd start

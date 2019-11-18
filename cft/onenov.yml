@@ -1,0 +1,101 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: writing template on vpc
+Metadata:
+  Authors:
+    Description: creating vpc
+Parameters:
+  vpccidr:
+    Description: enter cidr block range
+    Type: String
+  vpcsubnets:
+    Description: enter cidr block range
+    Type: CommaDelimitedList
+    Default: "10.10.1.0/24, 10.10.2.0/24, 10.10.3.0/24, 10.10.4.0/24"
+Resources:
+  myVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref vpccidr
+      EnableDnsSupport: true
+  igwName:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref myVPC
+      InternetGatewayId: !Ref igwName
+  subnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      VpcId: !Ref myVPC
+      CidrBlock: !Select [ 0, !Ref vpcsubnets ]
+  subnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      VpcId: !Ref myVPC
+      CidrBlock: !Select [ 1, !Ref vpcsubnets ]
+  subnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      VpcId: !Ref myVPC
+      CidrBlock: !Select [ 2, !Ref vpcsubnets ]
+  subnet4:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      VpcId: !Ref myVPC
+      CidrBlock: !Select [ 3, !Ref vpcsubnets ]
+  eipName:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  natName:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt eipName.AllocationId
+      SubnetId: !Ref subnet1
+      routeTableNamepub:
+  Type: AWS::EC2::RouteTable
+  Properties:
+    VpcId: !Ref myVPC
+routeTableNamepri:
+  Type: AWS::EC2::RouteTable
+  Properties:
+    VpcId: !Ref myVPC
+routeTableAssocName1:
+  Type: AWS::EC2::SubnetRouteTableAssociation
+  Properties:
+    SubnetId: !Ref subnet1
+    RouteTableId: !Ref routeTableNamepub
+routeTableAssocName2:
+  Type: AWS::EC2::SubnetRouteTableAssociation
+  Properties:
+    SubnetId: !Ref subnet2
+    RouteTableId: !Ref routeTableNamepub
+routeTableAssocName3:
+  Type: AWS::EC2::SubnetRouteTableAssociation
+  Properties:
+    SubnetId: !Ref subnet3
+    RouteTableId: !Ref routeTableNamepri
+routeTableAssocName:
+  Type: AWS::EC2::SubnetRouteTableAssociation
+  Properties:
+    SubnetId: !Ref subnet4
+    RouteTableId: !Ref routeTableNamepri
+routeNamepu:
+  Type: AWS::EC2::Route
+  Properties:
+    RouteTableId: !Ref routeTableNamepub
+    DestinationCidrBlock: 0.0.0.0/0
+    GatewayId: !Ref igwName
+routeNamepr:
+  Type: AWS::EC2::Route
+  Properties:
+    RouteTableId: routeTableNamepri
+    DestinationCidrBlock: 0.0.0.0/0
+    GatewayId: !Ref natgateway
+  

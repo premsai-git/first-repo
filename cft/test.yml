@@ -1,0 +1,35 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'To  launch ec2 instance'
+
+Resources:
+  myec2instance:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      DisableApiTermination: true   
+      ImageId:  ami-02913db388613c3e1
+      InstanceType: t2.micro   
+      KeyName: ibex-keypair
+      Monitoring: true   
+      UserData: !Base64 |  
+        #!/bin/bash
+        sudo su
+        yum remove java-1.7.0-openjdk.x86_64* 
+        yum install java-1.8.0-openjdk -y
+        wget -O /etc/yum.repos.d/jenkins.repo http://pkg.jenkins-ci.org/redhat/jenkins.repo
+        rpm --import https://jenkins-ci.org/redhat/jenkins-ci.org.key
+        yum install jenkins -y
+        service jenkins start
+        service enable jenkins
+
+                
+
+
+
+
+
+
+     
+
+
+      

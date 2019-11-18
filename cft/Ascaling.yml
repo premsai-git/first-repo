@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: create autroscaling    
+Resources:  
+ LaunchConfiguration:
+  Type: 'AWS::AutoScaling::LaunchConfiguration'
+  Properties:
+    KeyName: ibex-keypair
+    ImageId: ami-02913db388613c3e1
+    InstanceType: t2.micro
+    AssociatePublicIpAddress: 'True'
+    UserData: !Base64 | 
+        #!/bin/bash
+        sudo su -    
+        yum install httpd -y  
+        service httpd start
+        yum install php php-mysql -y   
+        service httpd restart
+        cd /var/www/html
+        echo "<?php phpinfo() ?>" >> test.php
+        yum install mysql-server -y   
+        service mysqld start   
+        mysqladmin -u root create mydb
+        mysqladmin --user=root password "prem"
+        cd /var/www/html
+        wget https://wordpress.org/wordpress-5.1.1.tar.gz
+        tar -xvf wordpress-5.1.1.tar.gz
+        cd wordpress  
+        mv wp-config-sample.php wp-config.php
+        ex -s -c '%s/database_name_here/mydb/g|x' wp-config.php
+        ex -s -c '%s/localhost/localhost/g|x' wp-config.php
+        ex -s -c '%s/username_here/root/g|x' wp-config.php
+        ex -s -c '%s/password_here/prem/g|x' wp-config.php
+        mv /var/www/html/wordpress/* /var/www/html
+
+    SecurityGroups: 
+      - sg-0dc8c8093d92e8e71
+ AutoScalingGroup:
+  Type: 'AWS::AutoScaling::AutoScalingGroup'
+  Properties:
+    AvailabilityZones:
+      - ap-south-1a
+      - ap-south-1b
+    LaunchConfigurationName: !Ref LaunchConfiguration
+    DesiredCapacity: '2'
+    MaxSize: '4'
+    MinSize: '2'
+    TerminationPolicies: 
+      - OldestInstance
+ ScaleUpPolicy:
+  Type: AWS::AutoScaling::ScalingPolicy
+  Properties:
+     AdjustmentType: ChangeInCapacity
+     AutoScalingGroupName: !Ref AutoScalingGroup
+     Cooldown: "60"
+     ScalingAdjustment: "1"
+ ScaleDownPolicy:
+  Type: AWS::AutoScaling::ScalingPolicy
+  Properties:
+     AdjustmentType: ChangeInCapacity
+     AutoScalingGroupName: !Ref AutoScalingGroup
+     Cooldown: "60"
+     ScalingAdjustment: "-1"
+ CPUAlarmHigh:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    EvaluationPeriods: '1'
+    Statistic: Average
+    Threshold: '90'
+    AlarmDescription: Alarm if CPU too high or metric disappears indicating instance is down  
+    Period: '120'
+    MetricName: CPUUtilization
+    AlarmActions:
+      - !Ref ScaleUpPolicy
+    Namespace: AWS/EC2
+    ComparisonOperator: GreaterThanThreshold
+    Dimensions:
+      - Name: AutoScalingGroupName
+        Value: !Ref AutoScalingGroup
+ CPUAlarmDown:
+  Type: AWS::CloudWatch::Alarm
+  Properties:
+    EvaluationPeriods: '2'
+    Statistic: Average
+    Threshold: '60'
+    AlarmDescription: Alarm if CPU too high or metric disappears indicating instance is down 
+    Period: '120'
+    MetricName: CPUUtilization
+    AlarmActions:
+      - !Ref ScaleDownPolicy
+    Namespace: AWS/EC2
+    ComparisonOperator: LessThanThreshold
+    Dimensions:
+      - Name: AutoScalingGroupName
+        Value: !Ref AutoScalingGroup
+        

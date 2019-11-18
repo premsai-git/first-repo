@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: creating vpc
+Resources: 
+myvpc:
+  Type: AWS::EC2::VPC
+  Properties:
+    CidrBlock: 10.10.0.0/16
+    EnableDnsSupport: true
+vpcsubnet1:
+  Type: AWS::EC2::Subnet
+  Properties:
+    AvailabilityZone: ap-south-1a
+    VpcId: !Ref myvpc
+    CidrBlock: 10.10.1.0/24
+vpcsubnet2:
+  Type: AWS::EC2::Subnet
+  Properties:
+    AvailabilityZone: ap-south-1b
+    VpcId: !Ref myvpc
+    CidrBlock: 10.10.2.0/24
+vpcsubnet3:
+  Type: AWS::EC2::Subnet
+  Properties:
+    AvailabilityZone: ap-south-1a
+    VpcId: !Ref myvpc
+    CidrBlock: 10.10.3.0/24
+vpcsubnet4:
+  Type: AWS::EC2::Subnet
+  Properties:
+    AvailabilityZone: ap-south-1b
+    VpcId: !Ref myvpc
+    CidrBlock: 10.10.4.0/24
+igwName:
+  Type: AWS::EC2::InternetGateway
+  Properties:
+AttachGateway:
+  Type: AWS::EC2::VPCGatewayAttachment
+  Properties:
+    VpcId: !Ref myvpc
+    InternetGatewayId: !Ref igwName
+eipName:
+  Type: AWS::EC2::EIP
+  Properties:
+  Domain: vpc
+natgateway:
+  Type: "AWS::EC2::NatGateway"
+  Properties:
+    AllocationId: !GetAtt eipName.AllocationId
+    SubnetId: !Ref vpcsubnet1
+routeTableNamepub:
+  Type: AWS::EC2::RouteTable
+  Properties:
+    VpcId: !Ref myvpc
+    Tags:
+      - Key: name  
+        Value: publicrt
+routeTableNamepri:
+  Type: AWS::EC2::RouteTable
+  Properties:
+    VpcId: !Ref myvpc
+routeTableAssocName1:
+  Type: AWS::EC2::SubnetRouteTableAssociation
+  Properties:
+    SubnetId: !Ref vpcsubnet1
+    RouteTableId: !Ref routeTableNamepub
+routeTableAssocName2:
+  Type: AWS::EC2::SubnetRouteTableAssociation
+  Properties:
+    SubnetId: !Ref vpcsubnet2
+    RouteTableId: !Ref routeTableNamepub
+routeTableAssocName3:
+  Type: AWS::EC2::SubnetRouteTableAssociation
+  Properties:
+    SubnetId: !Ref vpcsubnet3
+    RouteTableId: !Ref routeTableNamepri
+routeTableAssocName:
+  Type: AWS::EC2::SubnetRouteTableAssociation
+  Properties:
+    SubnetId: !Ref vpcsubnet4
+    RouteTableId: !Ref routeTableNamepri
+routeNamepu:
+  Type: AWS::EC2::Route
+  Properties:
+    RouteTableId: !Ref routeTableNamepub
+    DestinationCidrBlock: 0.0.0.0/0
+    GatewayId: !Ref igwName
+routeNamepr:
+  Type: AWS::EC2::Route
+  Properties:
+    RouteTableId: routeTableNamepri
+    DestinationCidrBlock: 0.0.0.0/0
+    GatewayId: !Ref natgateway
+  

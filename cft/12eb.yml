@@ -1,0 +1,169 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  ApplicationS3Bucket:
+   Description: Provide your bucket name
+   Type: String
+   Default: bucketname
+  ApplicationS3Artifact:
+   Description: Provide your application code zip or war
+   Type: String
+   Default: xxxxxx.zip
+  VPCId:
+   Type: AWS::EC2::VPC::Id
+  AppSubnets:
+   Type: List<AWS::EC2::Subnet::Id>
+   Description: Select three subnets in different Availability Zones!
+  ElbSubnets:
+   Type: List<AWS::EC2::Subnet::Id>
+   Description: Select two subnets in different Availability Zones!
+  EC2InstanceType:
+   Description: EC2 instance type
+   Type: String
+   AllowedValues:
+     - t2.micro
+     - t2.small
+     - t2.medium
+  EC2KeyName:
+   Description: The EC2 Key Pair to use for the Atlas/WebAPI EC2 Instances.
+   Type: AWS::EC2::KeyPair::KeyName
+  RollingUpdateEnabled:
+   Type: String
+   Description: select true/false for rolling updates
+   AllowedValues:
+     - 'true'
+     - 'false'
+   Default: 'true'
+  Applicationame:
+   Type: String
+   Description: 'Name of the ElasticBeanstalk Application'
+  LoadBalancerScheme:
+   Description: Indicates whether the load balancer in front of the Ec2 service is internet-facing or internal.
+   Type: String
+   AllowedValues:
+     - 'internet-facing'
+     - 'internal'
+Resources:
+  EBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for EC2 to allow SSH from Bastion and expose HTTP 80
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'   
+    
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+      VpcId: !Ref VPCId
+      Tags: 
+       - Key: Name 
+         Value: Eb-instance-sg 
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SecurityGroup for ElasticBeanstalk Balancer
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        
+      - IpProtocol: tcp
+        FromPort: '443'
+        ToPort: '443'
+        
+      VpcId:
+         Ref: VPCId
+      Tags: 
+       - Key: Name 
+         Value: ALB-Sg 
+  wordpressApp:
+    Type: AWS::ElasticBeanstalk::Application
+    Properties:
+      ApplicationName: !Ref Applicationame
+      Description: AWS Elastic Beanstalk Sample Application
+  wordpressAppVersion:
+    Type: AWS::ElasticBeanstalk::ApplicationVersion
+    Properties:
+      ApplicationName:
+        Ref: wordpressApp
+      Description: AWS ElasticBeanstalk Sample Application Version
+      SourceBundle:
+        S3Bucket: !Ref ApplicationS3Bucket
+        S3Key: !Ref ApplicationS3Artifact 
+  wordpressconfig:
+    Type: AWS::ElasticBeanstalk::ConfigurationTemplate
+    Properties:
+      ApplicationName:
+        Ref: wordpressApp
+      Description: AWS ElasticBeanstalk Sample Configuration Template
+      OptionSettings:
+      - Namespace: aws:autoscaling:asg
+        OptionName: MinSize
+        Value: '2'
+      - Namespace: aws:autoscaling:asg
+        OptionName: MaxSize
+        Value: '6'
+      - Namespace: aws:elasticbeanstalk:environment
+        OptionName: EnvironmentType
+        Value: LoadBalanced
+      - Namespace: aws:elasticbeanstalk:environment
+        OptionName: LoadBalancerType
+        Value: application
+      - Namespace: aws:elbv2:listener:default
+        OptionName: ListenerEnabled
+        Value: 'true'
+      - Namespace: aws:autoscaling:launchconfiguration
+        OptionName: EC2KeyName
+        Value: !Ref EC2KeyName
+      - Namespace: aws:autoscaling:trigger
+        OptionName: MeasureName
+        Value: CPUUtilization
+      - Namespace: aws:ec2:vpc
+        OptionName: VPCId
+        Value:
+          Ref: VPCId   
+      - Namespace: aws:ec2:vpc
+        OptionName: Subnets
+        Value: !Join [",", [!Select [0, !Ref AppSubnets], !Select [1, !Ref AppSubnets]]]
+      - Namespace: aws:ec2:vpc
+        OptionName: ELBSubnets
+        Value: !Join [",", [!Select [0, !Ref ElbSubnets], !Select [1, !Ref ElbSubnets]]]
+      - Namespace: aws:autoscaling:launchconfiguration
+        OptionName: InstanceType
+        Value: !Ref EC2InstanceType
+      - Namespace: aws:elasticbeanstalk:environment:process:default
+        OptionName: Port
+        Value: 80
+      - Namespace: aws:elasticbeanstalk:environment:process:default
+        OptionName: Protocol
+        Value: HTTP
+      - Namespace: aws:ec2:vpc
+        OptionName: AssociatePublicIpAddress
+        Value: 'true'
+      - Namespace: aws:autoscaling:launchconfiguration
+        OptionName: SecurityGroups
+        Value: !Ref EBSecurityGroup
+      - Namespace: aws:elb:loadbalancer 
+        OptionName: SecurityGroups
+        Value: !Ref ALBSecurityGroup
+      - Namespace: aws:ec2:vpc
+        OptionName: ELBScheme
+        Value: !Ref LoadBalancerScheme
+      - Namespace: aws:autoscaling:launchconfiguration
+        OptionName: IamInstanceProfile
+        Value: aws-elasticbeanstalk-ec2-role
+      SolutionStackName: 64bit Amazon Linux 2018.03 v2.9.0 running PHP 7.3
+  sampleEnvironment:
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      ApplicationName:
+        Ref: wordpressApp
+      Description: AWS ElasticBeanstalk Sample Environment
+      TemplateName:
+        Ref: wordpressconfig
+      VersionLabel:
+        Ref: wordpressAppVersion

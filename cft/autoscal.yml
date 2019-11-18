@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: create autroscaling    
+Resources:
+myautoscaling:
+  Type: AWS::AutoScaling::LaunchConfiguration
+  Properties: 
+    AssociatePublicIpAddress: true  
+    ImageId:  ami-02913db388613c3e1
+    InstanceMonitoring: true  
+    InstanceType: t2.micro
+    KeyName: ibex-keypair
+    LaunchConfigurationName: CF autoscaling
+    SecurityGroups: 
+      - sg-0dc8c8093d92e8e71
+    UserData:
+      Fn::Base64: !Sub |
+        #!/bin/bash
+        sudo -i     
+        yum update -y
+        yum install -y httpd 
+        yum install php php-mysql -y    
+        yum install mysql-server -y       
+        service httpd start   
+        service httpd Enable
+        service mysqld start
+        mysqladmin -u root create mydb
+        SET PASSWORD FOR 'root'@'localhost' = 'prem'
+        cd /var/www/html   
+        wget https://wordpress.org/wordpress-5.1.1.tar.gz
+        tar -xvzf wordpress-5.1.1.tar.gz       
+        mv wordpress/ testwordpress
+        cd testwordpress
+        cp wp-config-sample.php wp-config.php   
+        ex -s -c '%s/database_name_here/${mydb}/g|x' wp-config.php
+        ex -s -c '%s/localhost/${localhost}/g|x' wp-config.php
+        ex -s -c '%s/username_here/${root}/g|x' wp-config.php
+        ex -s -c '%s/password_here/${prem}/g|x' wp-config.php
+        mv /var/www/html/wordpress/* /var/www/html
+myautoscalinggroup:
+  Type: AWS::AutoScaling::AutoScalingGroup
+  Properties: 
+    AutoScalingGroupName: cfautosgroup  
+    LaunchConfigurationName: !Ref LaunchConfigurationName
+    MaxSize: "3"
+    MinSize: "1"
+    TerminationPolicies: 
+      - OldestInstance
+mylifecyclehooks:
+  Type: AWS::AutoScaling::LifecycleHook
+  Properties: 
+    AutoScalingGroupName: !Ref AutoScalingGroupName
+    LifecycleTransition: "autoscaling:EC2_INSTANCE_TERMINATING"
+myscalingpolocies:
+  Type: AWS::AutoScaling::ScalingPolicy
+  Properties: 
+    AutoScalingGroupName: !Ref AutoScalingGroupName
+   
+
+  
